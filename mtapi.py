@@ -53,8 +53,8 @@ def talk(sock, command, *params):
     while True:
         sentence = read_sentence(sock)
         attrs = {}
-        if len(sentence) > 1:
-            attr = sentence[1].split('=')[1:]
+        for n in range(1, len(sentence)):
+            attr = sentence[n].split('=')[1:]
             attrs.update({attr[0]: attr[1]})
         response.append((sentence[0], attrs))
         if sentence[0] == '!done':
@@ -175,5 +175,6 @@ if __name__ == '__main__':
     sock = connect(**params)
     login(sock, params['user'], params['pass'])
     response = talk(sock, '/interface/print')
-    print(response)
+    for sentence in response:
+        print(sentence)
     sock.close()
