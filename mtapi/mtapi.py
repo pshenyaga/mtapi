@@ -6,18 +6,14 @@ import hashlib
 import asyncio
 
 class Mtapi(asyncio.Protocol):
-    def __init__(self,
-                 connection_callback,
-                 received_callback,
-                 lost_callback):
+    def __init__(self, loop=None):
+        self.loop = loop
+        self.password = password
         self.transport = None
-        self.connection_callback = connection_callback
-        self.received_callback = received_callback
-        self.lost_callback = lost_callback
+        self.data_future = self.loop.create_future()
 
     def connection_made(self, transport):
         self.transport = transport
-        self.connection_callback(self)
 
     def data_received(self, data):
         sentences = []
@@ -28,12 +24,12 @@ class Mtapi(asyncio.Protocol):
                 pass
             else:
                 sentences.append(sentence)
-        self.received_callback(sentences)
+        self.data_future.set_result(sentences)
 
     def connection_lost(self, ext):
-        self.lost_callback(ext)
+        pass
 
-    def write_sentence(self, *words):
+    def _write_sentence(self, *words):
         '''Send sentence to the router'''
         words = list(words)
         words.append('')
@@ -140,7 +136,18 @@ class Mtapi(asyncio.Protocol):
             pass
 
         return len_, data
+    
+    async def login(self, user, password):
+        sentence = ('/login', '=name=' + user, '=password=' + password)
+        login_response = await self.talk(*sentence)
+        print(login_response)
 
+    async def talk(self, command, *params):
+        # Talk to remote
+        self._write_sentence(command, *params)
+        # Await response
+        await asyncio.wait_for(self.data_future, timeout = 5) 
+        return self.data_future.result()
 
 #def connect(**params):
 #    '''Connect to the router
@@ -202,27 +209,23 @@ class Mtapi(asyncio.Protocol):
 #            return response
 
 if __name__ == '__main__':
-    def _write(api_instance):
-        sentence = ('/login', '=name=' + user, '=password=' + password)
-        api_instance.write_sentence(*sentence)
-    
-    def _received(loop):
-        def rr(sentences):
-            print(sentences)
-            loop.stop()
-
-        return rr
-
-    def _lost(ext):
-        pass
 
     dst_host = '10.253.1.5' 
     dst_port = '8728'
     user = 'api'
     password = 'api_hard_pass'
     loop = asyncio.get_event_loop()
-    api = Mtapi(_write, _received(loop), _lost)
-    coro = loop.create_connection(lambda: api, dst_host, dst_port)
-    loop.run_until_complete(coro)
-    loop.run_forever()
-    loop.close()
+    api = Mtapi(loop)
+
+    async def connect():
+        await asyncio.wait_for(
+            loop.create_connection(
+                lambda: api, dst_host, dst_port),
+            timeout = 5)
+        await asyncio.wait_for(
+            api.login(user, password),
+            timeout = 5)
+    try:
+        loop.run_until_complete(connect())
+    except KeyboardInterrupt:
+        loop.close()
