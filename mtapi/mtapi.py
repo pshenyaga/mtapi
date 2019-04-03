@@ -6,6 +6,7 @@ import hashlib
 import asyncio
 import logging
 from protocol import Protocol
+from contextlib import suppress
 
 class Error(Exception):
     """Base class for exceptions in mtapi module"""
@@ -26,8 +27,8 @@ class Mtapi():
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger('asyncio')
         self.logger.setLevel(logging.DEBUG)
-        self.ch = logging.StreamHandler()
-        self.logger.addHandler(self.ch)
+        #self.ch = logging.StreamHandler()
+        #self.logger.addHandler(self.ch)
         #---- Temporary logger end
 
     def _next_tag(self):
@@ -55,24 +56,30 @@ class Mtapi():
         return attrs
 
     async def read_response(self):
+        def stop(self, error):
+            # clean up all
+            self.writer.close()
+            for future in self.to_resolve.values():
+                future.set_exception(error)
+            raise asyncio.CancelledError
+
         response = {}
         while True:
             try:
                 sentence = await self.proto.read_sentence()
             except asyncio.streams.IncompleteReadError as e:
-                # cancel all 'to_resolve' futures
-                for future in self.to_resolve.values():
-                    future.set_exception(e)
-                # clear response
-                break
-            except asyncio.CancelledError:
-                print('Time to go out!')
-                self.writer.close()
-                break
+                #expected = e.expected
+                #message = "Connection closed when reading {} bytes.".format(e.expected)
+                self.logger.error(e)
+                stop(self, FatalError(e))
+            except asyncio.CancelledError as e:
+                self.logger.debug("Reader task cancelled")
+                stop(self, e)
             if sentence[0] == '!fatal':
                 # Nothig to do. Connection is closed.
-                self.writer.close()
-                continue
+                self.logger.error('Connection closed!')
+                stop(self, FatalError("'!fatal' received. Connection closed."))
+
             attrs = self._parse_response_attrs(sentence)
             tag = int(attrs.pop('.tag'))
             if tag in response.keys():
@@ -87,7 +94,7 @@ class Mtapi():
         future = self.send(command, *attrs)
         try:
             await future
-        except asyncio.streams.IncompleteReadError as e:
+        except:
             raise
         else:
             tag, result = future.result()
@@ -148,7 +155,11 @@ class Mtapi():
         await self.login(params['user'], params['pass'])
 
     async def close(self):
-        self.reader_task.cancel()
+        if not self.reader_task.cancelled():
+            self.reader_task.cancel()
+        while not self.reader_task.cancelled():
+            await asyncio.sleep(0.01)
+            self.logger.debug("Mtapi.close(): Wating for reader task")
         print("Goodbye!")
 
 if __name__ == '__main__':
@@ -165,7 +176,7 @@ if __name__ == '__main__':
     async def test():
         try:
             await asyncio.wait_for(api.connect(**params), timeout=5)
-        except asyncio.streams.IncompleteReadError as e:
+        except FatalError as e:
             print("Connection closed.")
         except asyncio.futures.TimeoutError:
             print("Time out.")
@@ -179,7 +190,7 @@ if __name__ == '__main__':
                     #'/interface/print'), timeout = 5)
                     #'/interface/print', '?name=hw00'), timeout = 5)
                     #'/ip/firewall/address-list/print'), timeout = 5)
-            except asyncio.streams.IncompleteReadError as e:
+            except FatalError as e:
                 print(e)
             except asyncio.futures.TimeoutError as e:
                 print("Timeout!!!")
