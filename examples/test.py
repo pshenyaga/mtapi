@@ -8,7 +8,7 @@ if __name__ == '__main__':
     params = {
         'host': '10.253.12.130',
         'port': '8728',
-        'user': 'ap',
+        'user': 'api',
         'pass': 'api_hard_pass'
     }
     
@@ -28,12 +28,10 @@ if __name__ == '__main__':
             print(e)
         else:
             try:
-            #    result = await asyncio.wait_for(api.talk(
-                result = await api.talk(
-                    '/ip/firewall/address-list/print', '?list=ADM-HOSTS')
-                    #'/interface/print'), timeout = 5)
-                    #'/interface/print', '?name=hw00'), timeout = 5)
-                    #'/ip/firewall/address-list/print'), timeout = 5)
+                result = await asyncio.wait_for(api.talk(
+                    '/ip/firewall/address-list/print', '?list=ADM-HOSTS'),
+                    timeout = 5)
+                
             except mt_error.FatalError as e:
                 print(e)
             except asyncio.futures.TimeoutError as e:

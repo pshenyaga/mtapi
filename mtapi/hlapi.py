@@ -8,23 +8,22 @@ import binascii
 import hashlib
 import asyncio
 import logging
-from contextlib import suppress
 
 class HlAPI():
     def __init__(self, loop):
         self.loop = loop
-        self.loop.set_debug(False)
         self.reader_task = None
         self.proto = None
         self.current_tag = 0
         self.to_resolve = {}
-        #---- Temporary logger config
+        self._debug = False
+
+    def set_debug(debug=False):
+        self.loop.set_debug(False)
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger('asyncio')
         self.logger.setLevel(logging.DEBUG)
-        #self.ch = logging.StreamHandler()
-        #self.logger.addHandler(self.ch)
-        #---- Temporary logger end
+        
 
     def _next_tag(self):
         self.current_tag = self.current_tag + 1 if self.current_tag <= 65536 else 0
@@ -65,14 +64,17 @@ class HlAPI():
             except asyncio.streams.IncompleteReadError as e:
                 #expected = e.expected
                 #message = "Connection closed when reading {} bytes.".format(e.expected)
-                self.logger.error(e)
+                if self._debug:
+                    self.logger.error(e)
                 stop(self, mt_error.FatalError(e))
             except asyncio.CancelledError as e:
-                self.logger.debug("Reader task cancelled")
+                if self._debug:
+                    self.logger.debug("Reader task cancelled")
                 stop(self, e)
             if sentence[0] == '!fatal':
                 # Nothig to do. Connection is closed.
-                self.logger.error('Connection closed!')
+                if self._debug:
+                    self.logger.error('Connection closed!')
                 stop(self, mt_error.FatalError("'!fatal' received. Connection closed."))
 
             attrs = self._parse_response_attrs(sentence)
@@ -117,9 +119,10 @@ class HlAPI():
                 error_message = "{}: {}".format(
                     self.writer.get_extra_info('peername'),
                     attrs['message'])
-                self.logger.error(
-                    'Mtapi.login():{}'.format(
-                        error_message))
+                if self._debug:
+                    self.logger.error(
+                        'Mtapi.login():{}'.format(
+                            error_message))
                 raise mt_error.TrapError(error_message)
             if 'ret' in attrs:
                 # RouterOs pre-v6.43
@@ -131,9 +134,10 @@ class HlAPI():
                         error_message = "{}: {}".format(
                             self.writer.get_extra_info('peername'),
                             attrs2['message'])
-                        self.logger.error(
-                            'Mtapi.login():{}'.format(
-                                error_message))
+                        if self._debug:
+                            self.logger.error(
+                                'Mtapi.login():{}'.format(
+                                    error_message))
                         raise mt_error.TrapError(error_message)
 
     
@@ -166,5 +170,6 @@ class HlAPI():
             self.reader_task.cancel()
         while not self.reader_task.cancelled():
             await asyncio.sleep(0.01)
-            self.logger.debug("Mtapi.close(): Wating for reader task")
+            if self._debug:
+                self.logger.debug("Mtapi.close(): Wating for reader task")
 
