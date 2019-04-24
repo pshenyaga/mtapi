@@ -18,8 +18,9 @@ class HlAPI():
         self.to_resolve = {}
         self._debug = False
 
-    def set_debug(debug=False):
-        self.loop.set_debug(False)
+    def set_debug(self, debug=False):
+        self._debug = debug
+        self.loop.set_debug(debug)
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger('asyncio')
         self.logger.setLevel(logging.DEBUG)
@@ -39,7 +40,6 @@ class HlAPI():
 
     def _parse_response_attrs(self, sentence):
         attrs = {}
-        #print(sentence)
         for n in range(1, len(sentence)):
             if re.search("^\.", sentence[n]):
                 attr = sentence[n].split('=')
@@ -166,6 +166,11 @@ class HlAPI():
             raise
 
     async def close(self):
+        if not self.reader_task:
+            if self._debug:
+                self.logger.debug(
+                    "Mtapi.close(): No reader task. Nothing to do.")
+            return
         if not self.reader_task.cancelled():
             self.reader_task.cancel()
         while not self.reader_task.cancelled():
