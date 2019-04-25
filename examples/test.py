@@ -6,7 +6,7 @@ import asyncio
 
 if __name__ == '__main__':
     params = {
-        'host': '10.253.12.130',
+        'host': '10.253.12.129',
         'port': '8728',
         'user': 'api',
         'pass': 'api_hard_pass'
@@ -14,6 +14,7 @@ if __name__ == '__main__':
     
     loop = asyncio.get_event_loop()
     api = hlapi.HlAPI(loop)
+    api.set_debug(True)
 
     async def test():
         try:

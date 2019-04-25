@@ -12,6 +12,8 @@ import logging
 class HlAPI():
     def __init__(self, loop):
         self.loop = loop
+        self.host = None
+        self.port = None
         self.reader_task = None
         self.proto = None
         self.current_tag = 0
@@ -24,7 +26,6 @@ class HlAPI():
         logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger('asyncio')
         self.logger.setLevel(logging.DEBUG)
-        
 
     def _next_tag(self):
         self.current_tag = self.current_tag + 1 if self.current_tag <= 65536 else 0
@@ -33,23 +34,32 @@ class HlAPI():
 
     def send(self, command, *params):
         tag = self._next_tag()
+
+        if self._debug:
+            self.logger.debug(
+                'Mtapi.send():{}: {} : {} {}' .format(
+                    self.host,
+                    tag,
+                    command,
+                    " ".join(params)))
+
         self.to_resolve[tag] = asyncio.Future(loop=self.loop)
         self.proto.write_sentence(command, *params, '.tag={}'.format(tag))
 
         return self.to_resolve[tag]
 
-    def _parse_response_attrs(self, sentence):
-        attrs = {}
-        for n in range(1, len(sentence)):
-            if re.search("^\.", sentence[n]):
-                attr = sentence[n].split('=')
-            else:
-                attr = sentence[n].split('=', 2)[1:]
-            attrs.update({attr[0]: attr[1]})
-
-        return attrs
-
     async def read_response(self):
+        def parse_response_attrs(sentence):
+            attrs = {}
+            for n in range(1, len(sentence)):
+                if re.search("^\.", sentence[n]):
+                    attr = sentence[n].split('=')
+                else:
+                    attr = sentence[n].split('=', 2)[1:]
+                attrs.update({attr[0]: attr[1]})
+
+            return attrs
+
         def stop(self, error):
             # clean up all
             self.writer.close()
@@ -62,8 +72,6 @@ class HlAPI():
             try:
                 sentence = await self.proto.read_sentence()
             except asyncio.streams.IncompleteReadError as e:
-                #expected = e.expected
-                #message = "Connection closed when reading {} bytes.".format(e.expected)
                 if self._debug:
                     self.logger.error(e)
                 stop(self, mt_error.FatalError(e))
@@ -77,17 +85,32 @@ class HlAPI():
                     self.logger.error('Connection closed!')
                 stop(self, mt_error.FatalError("'!fatal' received. Connection closed."))
 
-            attrs = self._parse_response_attrs(sentence)
+            attrs = parse_response_attrs(sentence)
             tag = int(attrs.pop('.tag'))
+
+            if self._debug:
+                self.logger.debug(
+                    'Mtapi.read_response():{}: {} : {}'.format(
+                        self.host,
+                        tag,
+                        sentence))
+
             if tag in response.keys():
                 response[tag].append((sentence[0], attrs))
             else:
                 response[tag] = [(sentence[0], attrs)]
             if sentence[0] == '!done':
-                response[tag].pop()
+                if len(sentence) == 2:
+                    response[tag].pop()
                 self.to_resolve[tag].set_result((tag, response[tag]))
     
     async def talk(self, command, *attrs):
+        if self._debug:
+            self.logger.debug(
+                'Mtapi.talk():{}: sended: {} {}'.format(
+                    self.host,
+                    command,
+                    attrs))
         future = self.send(command, *attrs)
         try:
             await future
@@ -95,6 +118,12 @@ class HlAPI():
             raise
         else:
             tag, result = future.result()
+            if self._debug:
+                self.logger.debug(
+                    'Mtapi.talk():{}: received: {} {}'.format(
+                        self.host,
+                        tag,
+                        result))
             del self.to_resolve[tag]
 
             return(result)
@@ -117,7 +146,7 @@ class HlAPI():
         for replay, attrs in login_response:
             if replay == '!trap':
                 error_message = "{}: {}".format(
-                    self.writer.get_extra_info('peername'),
+                    self.host,
                     attrs['message'])
                 if self._debug:
                     self.logger.error(
@@ -128,40 +157,39 @@ class HlAPI():
                 # RouterOs pre-v6.43
                 login_response2 = await self.talk("/login",
                     "=name=" + user,
-                    "=response=00" + auth_response(password, attrs['ret']))
+                    "=response=00" + _auth_response(password, attrs['ret']))
                 for replay2, attrs2 in login_response2:
                     if replay2 == '!trap':
                         error_message = "{}: {}".format(
-                            self.writer.get_extra_info('peername'),
+                            self.host,
                             attrs2['message'])
                         if self._debug:
                             self.logger.error(
                                 'Mtapi.login():{}'.format(
                                     error_message))
                         raise mt_error.TrapError(error_message)
-
     
     async def connect(self, **params):
         '''Connect to the router
         params: {'host': 'hostname',
                  'port': 'portnamber',
-                 'user': 'username',
-                 'pass': 'password'}'''
+                 'username': 'username',
+                 'password': 'password'}'''
         params = {
             'host': params.get('host', '192.168.88.1'),
             'port': params.get('port', 8728),
-            'user': params.get('user', 'admin'),
-            'pass': params.get('pass', '')
+            'username': params.get('username', 'admin'),
+            'password': params.get('password', '')
         }
-        reader, writer = await asyncio.open_connection(
+        reader, self.writer = await asyncio.open_connection(
             params['host'],
             params['port'],
             loop=self.loop)
-        self.writer = writer
-        self.proto = Protocol(reader, writer)
+        self.host, self.port = self.writer.get_extra_info('peername')
+        self.proto = Protocol(reader, self.writer)
         self.reader_task = self.loop.create_task(self.read_response())
         try:
-            await self.login(params['user'], params['pass'])
+            await self.login(params['username'], params['password'])
         except:
             raise
 
