@@ -9,7 +9,36 @@ import hashlib
 import asyncio
 import logging
 
-class HlAPI():
+
+async def connect(loop=None,
+                  address: str="192.168.88.1",
+                  port: str="8728",
+                  username: str="admin",
+                  password: str="",
+                  **params: any):
+    '''Connect and login to the router. Returns HlAPI object.
+    Usage: 
+        my_router = hlapia.connect(loop="my_event_loop",
+                                   address="my_router_address",
+                                   port="my_router_port",
+                                   username="my_username",
+                                   password="my_hard_pass")'''
+   
+    api = HlAPI(loop)
+    try:
+        api.connect(address, port)
+    except:
+        raise
+    else:
+        try:
+            api.login(username, password)
+        except:
+            raise
+        else:
+            return api
+
+
+class HlAPI:
     def __init__(self, loop):
         self.loop = loop
         self.host = None
@@ -80,7 +109,6 @@ class HlAPI():
                     self.logger.debug("Reader task cancelled")
                 stop(self, e)
             if sentence[0] == '!fatal':
-                # Nothig to do. Connection is closed.
                 if self._debug:
                     self.logger.error('Connection closed!')
                 stop(self, mt_error.FatalError("'!fatal' received. Connection closed."))
@@ -169,29 +197,25 @@ class HlAPI():
                                     error_message))
                         raise mt_error.TrapError(error_message)
     
-    async def connect(self, **params):
+    async def connect(self,
+                      address: str="192.168.88.1",
+                      port: str=8728,
+                      **params: any) -> None:
         '''Connect to the router
-        params: {'host': 'hostname',
-                 'port': 'portnamber',
-                 'username': 'username',
-                 'password': 'password'}'''
-        params = {
-            'host': params.get('host', '192.168.88.1'),
-            'port': params.get('port', 8728),
-            'username': params.get('username', 'admin'),
-            'password': params.get('password', '')
-        }
-        reader, self.writer = await asyncio.open_connection(
-            params['host'],
-            params['port'],
-            loop=self.loop)
-        self.host, self.port = self.writer.get_extra_info('peername')
-        self.proto = Protocol(reader, self.writer)
-        self.reader_task = self.loop.create_task(self.read_response())
+        Usage:
+            connect("my_address", "my_port")'''
+
         try:
-            await self.login(params['username'], params['password'])
+            reader, self.writer = await asyncio.open_connection(
+                address,
+                port,
+                loop=self.loop)
         except:
             raise
+        else:
+            self.host, self.port = self.writer.get_extra_info('peername')
+            self.proto = Protocol(reader, self.writer)
+            self.reader_task = self.loop.create_task(self.read_response())
 
     async def close(self):
         if not self.reader_task:
