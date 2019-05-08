@@ -62,6 +62,9 @@ class HlAPI:
         return self.current_tag
 
     def send(self, command, *params):
+        if len(command) == 0:
+            return None
+
         tag = self._next_tag()
 
         if self._debug:
@@ -140,6 +143,8 @@ class HlAPI:
                     command,
                     attrs))
         future = self.send(command, *attrs)
+        if not future:
+            return []
         try:
             await future
         except:
