@@ -15,6 +15,7 @@ async def connect(loop=None,
                   port: str="8728",
                   username: str="admin",
                   password: str="",
+                  debug: bool=False,
                   **params: any):
     '''Connect and login to the router. Returns HlAPI object.
     Usage: 
@@ -25,14 +26,16 @@ async def connect(loop=None,
                                    password="my_hard_pass")'''
    
     api = HlAPI(loop)
+    api.set_debug(debug)
     try:
-        api.connect(address, port)
+        await api.connect(address, port)
     except:
         raise
     else:
         try:
-            api.login(username, password)
+            await api.login(username, password)
         except:
+            await api.close()
             raise
         else:
             return api
