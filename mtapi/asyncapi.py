@@ -1,4 +1,4 @@
-# hlapi.py
+# api.py
 
 from mtapi.protocol import Protocol
 from mtapi import error as mt_error
@@ -25,7 +25,7 @@ async def connect(loop=None,
                                    username="my_username",
                                    password="my_hard_pass")'''
    
-    api = HlAPI(loop)
+    api = API(loop)
     api.set_debug(debug)
     try:
         await api.connect(address, port)
@@ -41,7 +41,7 @@ async def connect(loop=None,
             return api
 
 
-class HlAPI:
+class API:
     def __init__(self, loop):
         self.loop = loop
         self.host = None
@@ -134,8 +134,8 @@ class HlAPI:
             else:
                 response[tag] = [(sentence[0], attrs)]
             if sentence[0] == '!done':
-                if len(sentence) == 2:
-                    response[tag].pop()
+#                if len(sentence) == 2:
+#                    response[tag].pop()
                 self.to_resolve[tag].set_result((tag, response[tag]))
     
     async def talk(self, command, *attrs):

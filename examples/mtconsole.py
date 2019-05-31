@@ -1,7 +1,7 @@
 import argparse
 import getpass
 import asyncio
-from mtapi import hlapi
+from mtapi import asyncapi
 from mtapi import error as mt_error
 
 
@@ -35,7 +35,7 @@ def login(api):
             return
 
 
-def console(api: hlapi.HlAPI) -> None:
+def console(api: asyncapi.API) -> None:
     '''Main console'''
     while True:
         args = input("<<< ").strip().split()
@@ -45,7 +45,7 @@ def console(api: hlapi.HlAPI) -> None:
             print(">>> ", res[0], res[1])
 
 
-def main(api: hlapi.HlAPI, address: str, port: str) -> None:
+def main(api: asyncapi.API, address: str, port: str) -> None:
     try:
         api.loop.run_until_complete(api.connect(address, port))
     except:
@@ -66,7 +66,7 @@ def main(api: hlapi.HlAPI, address: str, port: str) -> None:
 if __name__ == "__main__":
     address, port = parse_args()
     loop = asyncio.get_event_loop()
-    api = hlapi.HlAPI(loop)
+    api = asyncapi.API(loop)
 
     try:
         main(api, address, port)
