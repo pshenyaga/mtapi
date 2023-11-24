@@ -18,13 +18,13 @@ async def connect(loop=None,
                   debug: bool=False,
                   **params: any):
     '''Connect and login to the router. Returns HlAPI object.
-    Usage: 
+    Usage:
         my_router = hlapia.connect(loop="my_event_loop",
                                    address="my_router_address",
                                    port="my_router_port",
                                    username="my_username",
                                    password="my_hard_pass")'''
-   
+
     api = API(loop)
     api.set_debug(debug)
     try:
@@ -108,7 +108,8 @@ class API:
         while True:
             try:
                 sentence = await self.proto.read_sentence()
-            except asyncio.streams.IncompleteReadError as e:
+#            except asyncio.streams.IncompleteReadError as e:
+            except asyncio.IncompleteReadError as e:
                 if self._debug:
                     self.logger.error("{}: {}".format(self.host, e))
                 stop(self, mt_error.FatalError(e))
@@ -139,7 +140,7 @@ class API:
 #                if len(sentence) == 2:
 #                    response[tag].pop()
                 self.to_resolve[tag].set_result((tag, response[tag]))
-    
+
     async def talk(self, command, *attrs):
         if self._debug:
             self.logger.debug(
@@ -165,7 +166,7 @@ class API:
             del self.to_resolve[tag]
 
             return(result)
-    
+
     async def login(self, user, password):
         '''Login to the router'''
 
@@ -205,7 +206,7 @@ class API:
                                     self.host,
                                     error_message))
                         raise mt_error.TrapError(error_message)
-    
+
     async def connect(self,
                       address: str="192.168.88.1",
                       port: str=8728,
