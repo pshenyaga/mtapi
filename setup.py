@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
     setuptools.setup(
-        name="aiomtapi",
+        name="mtapi",
         version="0.1.1",
         author="Oleksii Pshenychnyi",
         author_email="afw@afw.net.ua",
