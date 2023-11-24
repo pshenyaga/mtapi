@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
     setuptools.setup(
         name="mtapi",
-        version="0.1.1",
+        version="0.1.2",
         author="Oleksii Pshenychnyi",
         author_email="afw@afw.net.ua",
         description="Mikrotik asynchronous API",
