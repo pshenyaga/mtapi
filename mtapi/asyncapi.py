@@ -51,13 +51,15 @@ class API:
         self.current_tag = 0
         self.to_resolve = {}
         self._debug = False
+        self.logger = logging.getLogger('mtapi')
 
     def set_debug(self, debug=False):
         self._debug = debug
-        self.loop.set_debug(debug)
-        logging.basicConfig(level=logging.DEBUG)
-        self.logger = logging.getLogger('asyncio')
-        self.logger.setLevel(logging.DEBUG)
+        #self.loop.set_debug(debug)
+        #logging.basicConfig(level=logging.DEBUG)
+        # self.logger = logging.getLogger('asyncio')
+        if debug:
+            self.logger.setLevel(logging.DEBUG)
 
     def _next_tag(self):
         self.current_tag = self.current_tag + 1 if self.current_tag <= 65536 else 0
@@ -70,13 +72,12 @@ class API:
 
         tag = self._next_tag()
 
-        if self._debug:
-            self.logger.debug(
-                'Mtapi.send():{}: {} : {} {}' .format(
-                    self.host,
-                    tag,
-                    command,
-                    " ".join(params)))
+        self.logger.debug(
+            '{}: Mtapi.send(): {} : {} {}' .format(
+                 self.host,
+                 tag,
+                 command,
+                 " ".join(params)))
 
         self.to_resolve[tag] = asyncio.Future(loop=self.loop)
         self.proto.write_sentence(command, *params, '.tag={}'.format(tag))
@@ -99,7 +100,8 @@ class API:
             # clean up all
             self.writer.close()
             for future in self.to_resolve.values():
-                future.set_exception(error)
+                if not future.done():
+                    future.set_exception(error)
             raise asyncio.CancelledError
 
         response = {}
@@ -108,15 +110,15 @@ class API:
                 sentence = await self.proto.read_sentence()
             except asyncio.streams.IncompleteReadError as e:
                 if self._debug:
-                    self.logger.error(e)
+                    self.logger.error("{}: {}".format(self.host, e))
                 stop(self, mt_error.FatalError(e))
             except asyncio.CancelledError as e:
                 if self._debug:
-                    self.logger.debug("Reader task cancelled")
+                    self.logger.debug("{}: Reader task cancelled".format(self.host))
                 stop(self, e)
             if sentence[0] == '!fatal':
                 if self._debug:
-                    self.logger.error('Connection closed!')
+                    self.logger.error('{}: Connection closed!'.format(self.host))
                 stop(self, mt_error.FatalError("'!fatal' received. Connection closed."))
 
             attrs = parse_response_attrs(sentence)
@@ -124,7 +126,7 @@ class API:
 
             if self._debug:
                 self.logger.debug(
-                    'Mtapi.read_response():{}: {} : {}'.format(
+                    '{}: Mtapi.read_response(): {} : {}'.format(
                         self.host,
                         tag,
                         sentence))
@@ -141,7 +143,7 @@ class API:
     async def talk(self, command, *attrs):
         if self._debug:
             self.logger.debug(
-                'Mtapi.talk():{}: sended: {} {}'.format(
+                '{}: Mtapi.talk(): sended: {} {}'.format(
                     self.host,
                     command,
                     attrs))
@@ -156,7 +158,7 @@ class API:
             tag, result = future.result()
             if self._debug:
                 self.logger.debug(
-                    'Mtapi.talk():{}: received: {} {}'.format(
+                    '{}: Mtapi.talk(): received: {} {}'.format(
                         self.host,
                         tag,
                         result))
@@ -181,13 +183,12 @@ class API:
                                          '=password=' + password)
         for replay, attrs in login_response:
             if replay == '!trap':
-                error_message = "{}: {}".format(
-                    self.host,
+                error_message = "{{}".format(
                     attrs['message'])
                 if self._debug:
                     self.logger.error(
-                        'Mtapi.login():{}'.format(
-                            error_message))
+                        '{}: Mtapi.login(): {}'.format(
+                            self.host, error_message))
                 raise mt_error.TrapError(error_message)
             if 'ret' in attrs:
                 # RouterOs pre-v6.43
@@ -196,12 +197,12 @@ class API:
                     "=response=00" + _auth_response(password, attrs['ret']))
                 for replay2, attrs2 in login_response2:
                     if replay2 == '!trap':
-                        error_message = "{}: {}".format(
-                            self.host,
+                        error_message = "{}".format(
                             attrs2['message'])
                         if self._debug:
                             self.logger.error(
-                                'Mtapi.login():{}'.format(
+                                '{}: Mtapi.login(): {}'.format(
+                                    self.host,
                                     error_message))
                         raise mt_error.TrapError(error_message)
     
@@ -229,12 +230,13 @@ class API:
         if not self.reader_task:
             if self._debug:
                 self.logger.debug(
-                    "Mtapi.close(): No reader task. Nothing to do.")
+                    "{}: Mtapi.close(): No reader task. Nothing to do.".format(self.host))
             return
         if not self.reader_task.cancelled():
             self.reader_task.cancel()
-        while not self.reader_task.cancelled():
+        attempts = 0
+        while not self.reader_task.cancelled() and attempts < 3:
             await asyncio.sleep(0.01)
-            if self._debug:
-                self.logger.debug("Mtapi.close(): Wating for reader task")
+            self.logger.debug("{}: Mtapi.close(): Wating for reader task".format(self.host))
+            attempts += 1
 
